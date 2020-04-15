@@ -2,8 +2,12 @@ import json
 import plotly
 import pandas as pd
 
-from nltk.stem import WordNetLemmatizer
+import nltk
+nltk.download(['punkt', 'wordnet', 'stopwords'])
+from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+import re
 
 from flask import Flask
 from flask import render_template, request, jsonify
@@ -14,23 +18,59 @@ from sqlalchemy import create_engine
 
 app = Flask(__name__)
 
-def tokenize(text):
+def tokenize(text, lemmatize=True):
+    """
+    Custom tokenizer for sklearn CountVectorizer
+
+    Args:
+    text: str,  raw text
+    Return:
+    tokens: list of str, list of lemmatized tokens
+    """
+
+    # Post-processing pipeline
+
+    # Text normalization: Lower case
+    text = text.lower()
+
+    # Text cleaning: Delete URLs
+
+    regex = "(http[s]?://\S+)"
+    text = re.sub(regex,"[URL]",text)
+
+    # Text Tokenization
     tokens = word_tokenize(text)
-    lemmatizer = WordNetLemmatizer()
 
-    clean_tokens = []
-    for tok in tokens:
-        clean_tok = lemmatizer.lemmatize(tok).lower().strip()
-        clean_tokens.append(clean_tok)
+    # Text cleaning
 
-    return clean_tokens
+    ## Delete punctuation
+    regex = re.compile("\W")
+    tokens = [t for t in tokens if not regex.match(t)]
+
+    ## Delete single caracters
+    regex = re.compile("^[a-z]$")
+    tokens = [t for t in tokens if not regex.match(t)]
+
+    ## Delete numbers
+    regex = re.compile("^[0-9]+\W*$")
+    tokens = [t for t in tokens if not regex.match(t)]
+
+    ## Delete stopwords
+    tokens = [t for t in tokens if not t in stopwords.words("english")]
+
+    # Text Lemmatization
+    if lemmatize:
+        lemmatizer = WordNetLemmatizer()
+        tokens = [lemmatizer.lemmatize(t) for t in tokens]
+
+    return tokens
 
 # load data
-engine = create_engine('sqlite:///../data/YourDatabaseName.db')
-df = pd.read_sql_table('YourTableName', engine)
+engine = create_engine('sqlite:///../data/DisasterResponse.db')
+df = pd.read_sql_table('MessageToCategories', engine)
 
 # load model
-model = joblib.load("../models/your_model_name.pkl")
+model = joblib.load("../models/classifier.pkl")
 
 
 # index webpage displays cool visuals and receives user input text for model
@@ -40,30 +80,56 @@ def index():
     
     # extract data needed for visuals
     # TODO: Below is an example - modify to extract data for your own visuals
+    
+    categories = df.columns[3:]
+    data = df[categories].sum().sort_values(ascending=True)
+    labels = data.index.values
+    freqs = data.values
+    
+    categories = df.columns[3:]
+    data = df[categories].sum().sort_values(ascending=True)
+    labels = data.index.values
+    freqs = data.values
+    
     genre_counts = df.groupby('genre').count()['message']
     genre_names = list(genre_counts.index)
     
+    
     # create visuals
-    # TODO: Below is an example - modify to create your own visuals
     graphs = [
         {
             'data': [
                 Bar(
-                    x=genre_names,
-                    y=genre_counts
+                    x=labels,
+                    y=freqs
                 )
             ],
 
             'layout': {
-                'title': 'Distribution of Message Genres',
+                'title': 'Labels distribution',
                 'yaxis': {
                     'title': "Count"
                 },
                 'xaxis': {
-                    'title': "Genre"
+                    'title': "Label"
                 }
             }
-        }
+        },
+           {
+  "data": [
+    {
+      "values": genre_counts,
+      "labels": genre_names,
+      "domain": {"x": [0, .5]},
+      "name": 'Label',
+      "hoverinfo":"label+percent+name",
+      "hole": .3,
+      "type": "pie"
+    },],
+  "layout": {
+        "title":'Genre distribution'
+    }
+}
     ]
     
     # encode plotly graphs in JSON
@@ -82,7 +148,7 @@ def go():
 
     # use model to predict classification for query
     classification_labels = model.predict([query])[0]
-    classification_results = dict(zip(df.columns[4:], classification_labels))
+    classification_results = dict(zip(df.columns[3:], classification_labels))
 
     # This will render the go.html Please see that file. 
     return render_template(

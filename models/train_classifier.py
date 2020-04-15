@@ -137,13 +137,13 @@ def build_model():
     ('clf', MultiOutputClassifier(RandomForestClassifier(), n_jobs=-1))])
 
     
-    parameters = {'clf__estimator__max_depth': [5,10]}
+    parameters = {'clf__estimator__max_depth': [4,16,64,128]}
 
     score = make_scorer(custom_scorer, greater_is_better=True)
 
     grid_search = GridSearchCV(estimator=pipeline,
                                param_grid=parameters,
-                               cv=3,
+                               cv=2,
                                verbose=4,
                                n_jobs=-1,
                                scoring=score)

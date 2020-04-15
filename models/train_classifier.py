@@ -136,6 +136,7 @@ def build_model():
     pipeline = Pipeline([('extractor', TfidfVectorizer(tokenizer=tokenize)),
     ('clf', MultiOutputClassifier(RandomForestClassifier(), n_jobs=-1))])
 
+    
     parameters = {'clf__estimator__max_depth': [5,10]}
 
     score = make_scorer(custom_scorer, greater_is_better=True)
